@@ -8,7 +8,7 @@ FactoryVision is an end-to-end industrial visual-inspection system for detecting
 
 The target outcome is a reproducible, production-oriented computer-vision platform rather than an isolated research notebook.
 
-> Implementation follows a staged seven-day plan. Metrics, benchmarks, deployment endpoints, and screenshots will be added as they are produced.
+> This README describes the complete target system. Metrics, benchmarks, deployment endpoints, and screenshots will be added as they are produced.
 
 ## Project goals
 
@@ -31,7 +31,7 @@ FactoryVision targets pixel-level industrial defect inspection using the [Kolekt
 
 The initial model will be a PyTorch U-Net or DeepLabV3 implementation. The project prioritizes reproducibility and production integration over adding multiple deep-learning frameworks or unnecessarily novel architectures.
 
-## Planned architecture
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -52,7 +52,7 @@ flowchart LR
     O["PySpark offline analytics"] --> H
 ```
 
-## Target technology stack
+## Technology stack
 
 | Area | Technologies and concepts |
 | --- | --- |
@@ -69,7 +69,7 @@ flowchart LR
 
 ## Inference API
 
-The planned FastAPI service will provide:
+The FastAPI service will provide:
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -110,9 +110,9 @@ Prometheus metrics and Grafana dashboards will cover:
 
 Prediction logs will be stored in PostgreSQL with image ID, timestamp, model version, defect score, prediction latency, and status. A small PySpark job will compute daily statistics by model version and defect status.
 
-## Seven-day delivery plan
+## Implementation roadmap
 
-### Day 1 - Dataset, repository, and baseline model
+### Data, repository, and baseline model
 
 - Set up the project structure, Python environment, and pinned dependencies.
 - Download KolektorSDD2 and track it with DVC; raw data does not belong in Git.
@@ -120,7 +120,7 @@ Prediction logs will be stored in PostgreSQL with image ID, timestamp, model ver
 - Train a first PyTorch U-Net or DeepLabV3 baseline.
 - Report segmentation and defect-level metrics with prediction overlays.
 
-### Day 2 - Reproducible training
+### Reproducible training
 
 - Convert ingestion, preprocessing, training, and evaluation into Kedro nodes and pipelines.
 - Add configuration for paths, augmentations, seeds, model settings, and hyperparameters.
@@ -128,7 +128,7 @@ Prediction logs will be stored in PostgreSQL with image ID, timestamp, model ver
 - Register the best model as `factoryvision-segmentation`.
 - Run three to five comparable experiments.
 
-### Day 3 - Real-time inference and ONNX
+### Real-time inference and ONNX optimization
 
 - Export the best model to ONNX.
 - Benchmark PyTorch against ONNX Runtime.
@@ -136,27 +136,27 @@ Prediction logs will be stored in PostgreSQL with image ID, timestamp, model ver
 - Add request validation, health checks, model metadata, and error handling.
 - Optionally implement a C++/OpenCV/ONNX Runtime inference executable.
 
-### Day 4 - Batch inference and data processing
+### Batch inference and data processing
 
 - Store prediction metadata and results in PostgreSQL.
 - Create an Airflow DAG for discovery, validation, batch inference, persistence, and summary generation.
 - Add PySpark offline analytics for daily prediction statistics.
 
-### Day 5 - Containers, Kubernetes, and monitoring
+### Containers, Kubernetes, and monitoring
 
 - Build a multi-stage Docker image.
 - Add Docker Compose for the API, PostgreSQL, MLflow, Prometheus, and Grafana.
 - Create Kubernetes Deployment, Service, ConfigMap, and resource-limit manifests.
 - Run the stack locally with kind, k3d, or minikube.
 
-### Day 6 - CI/CD and deployment
+### CI/CD and deployment
 
 - Add a GitHub Actions pipeline for linting, tests, and Docker builds.
 - Push successful images to GitHub Container Registry.
 - Deploy the FastAPI container to Azure Container Apps or another simple Azure target.
 - Document secrets, environment variables, load-test results, and rollback procedures.
 
-### Day 7 - Portfolio release
+### Portfolio and release readiness
 
 - Complete the README, architecture diagram, results, screenshots, and demo.
 - Add a Model Card and Data Card covering intended use, limitations, and failure modes.
@@ -165,13 +165,13 @@ Prediction logs will be stored in PostgreSQL with image ID, timestamp, model ver
 - Add a Makefile or task runner and create the `v1.0.0` GitHub release.
 - Optionally generate a daily inspection report from structured batch metrics using an LLM downstream of the computer-vision predictions.
 
-## Core scope and stretch scope
+## Project capabilities
 
-### Core
+### Primary platform capabilities
 
 PyTorch segmentation, DVC, Kedro, MLflow, FastAPI, SQL/PostgreSQL, Airflow, Docker, Prometheus/Grafana, GitHub Actions, and one deployment target.
 
-### Stretch
+### Extended capabilities
 
 PySpark, local Kubernetes, C++ ONNX inference, edge-runtime optimization, and LLM-generated inspection reports.
 
@@ -204,7 +204,7 @@ factoryvision-mlops/
 `-- README.md
 ```
 
-## Planned commands
+## Project commands
 
 ```bash
 make train
@@ -214,7 +214,7 @@ make docker
 make k8s
 ```
 
-The exact commands will become authoritative once the corresponding components are implemented.
+These are the intended developer entry points for the corresponding components.
 
 ## Definition of done
 
