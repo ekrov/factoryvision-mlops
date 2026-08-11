@@ -31,6 +31,31 @@ FactoryVision targets pixel-level industrial defect inspection using the [Kolekt
 
 The initial model will be a PyTorch U-Net or DeepLabV3 implementation. The project prioritizes reproducibility and production integration over adding multiple deep-learning frameworks or unnecessarily novel architectures.
 
+## Dataset examples
+
+These are raw dataset inputs before model inference. The left image shows representative defect types from the official dataset overview; the right image is a defect-free training sample. The model will learn to distinguish these cases and, for defective inputs, produce a pixel-level mask.
+
+<table>
+  <tr>
+    <th>Defect examples</th>
+    <th>Non-defect example</th>
+  </tr>
+  <tr>
+    <td>
+      <img src="https://www.vicos.si/resources/kolektorsdd2/images/kolektor-sdd2-types.png" alt="Representative KolektorSDD2 surface defect examples" width="420" />
+    </td>
+    <td>
+      <img src="assets/dataset/non_defect_sample.jpg" alt="KolektorSDD2 defect-free surface sample" width="240" />
+    </td>
+  </tr>
+  <tr>
+    <td>Scratches, spots, and other surface imperfections.</td>
+    <td>A surface image labeled without a visible defect.</td>
+  </tr>
+</table>
+
+The defect overview image is provided by [ViCoS Lab](https://www.vicos.si/resources/kolektorsdd2/). The non-defect sample is from a [KolektorSDD2 dataset mirror](https://huggingface.co/datasets/sizhkhy/kolektor_sdd2) and is stored locally so the example renders reliably on GitHub. Dataset usage remains subject to the original [CC BY-NC-SA 4.0 license](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
 ## Architecture
 
 ```mermaid
@@ -236,4 +261,3 @@ These are the intended developer entry points for the corresponding components.
 FactoryVision demonstrates the full lifecycle of an applied computer-vision system: data engineering, segmentation, evaluation, experiment tracking, model versioning, optimized inference, APIs, batch orchestration, deployment, CI/CD, and observability.
 
 The project is designed to complement research-heavy computer-vision experience with practical production ML and MLOps engineering.
-
