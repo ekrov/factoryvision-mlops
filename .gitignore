@@ -1,0 +1,16 @@
+# Local learning instructions; keep them out of the public repository.
+instructions.md
+factoryvision-notion.md
+.venv/
+
+# Local DVC cache and temporary metadata.
+.dvc/cache/
+.dvc/site-cache/
+.dvc/tmp/
+
+# Dataset files are tracked through the DVC pointer file, not Git.
+data/raw/kolektor-sdd2/
+data/raw/*.zip
+
+# Local DVC remote; do not commit the remote's data objects to Git.
+data/dvc-remote/

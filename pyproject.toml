@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factoryvision"
+version = "0.1.0"
+description = "Production-oriented industrial surface defect segmentation and MLOps platform."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "numpy==2.2.1",
+    "pandas==2.3.1",
+    "opencv-python==4.13.0.92",
+    "matplotlib==3.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "dvc==3.67.1",
+    "jupyter==1.1.1",
+    "pytest==9.0.3",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# The CUDA-enabled PyTorch wheels should be installed from the official
+# PyTorch index that matches the working local CUDA setup.
