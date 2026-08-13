@@ -2,6 +2,9 @@
 instructions.md
 factoryvision-notion.md
 .venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
 
 # Local DVC cache and temporary metadata.
 .dvc/cache/
@@ -14,3 +17,6 @@ data/raw/*.zip
 
 # Local DVC remote; do not commit the remote's data objects to Git.
 data/dvc-remote/
+
+# Generated training runs and model checkpoints.
+artifacts/
