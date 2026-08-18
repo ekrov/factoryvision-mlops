@@ -1,0 +1,39 @@
+dataset:
+  manifest_path: data/processed/splits.csv
+  # (height, width), matching KolektorSDD2Dataset's expected order.
+  image_size: [256, 640]
+
+augmentation:
+  # Augmentations are applied only to the training split.
+  enabled: true
+  horizontal_flip_probability: 0.5
+  vertical_flip_probability: 0.0
+
+model:
+  in_channels: 3
+  out_channels: 1
+  base_channels: 32
+
+training:
+  batch_size: 2
+  num_workers: 0
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  bce_weight: 0.25
+  dice_weight: 0.75
+  max_pos_weight: 50.0
+  epochs: 5
+  run_dir: artifacts/runs/kedro-baseline
+  seed: 42
+  deterministic: true
+  device: auto
+
+evaluation:
+  threshold: 0.5
+  examples_per_class: 2
+
+tracking:
+  # Local SQLite tracking; generated database/artifacts are excluded from Git.
+  tracking_uri: sqlite:///artifacts/mlflow.db
+  experiment_name: factoryvision-baseline
+  run_name: kedro-baseline

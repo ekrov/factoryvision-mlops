@@ -208,12 +208,14 @@ A complete, documented production pipeline is more valuable than touching many t
 factoryvision-mlops/
 |-- .github/workflows/ci.yml
 |-- configs/
+|-- conf/base/             # Kedro parameters and catalog configuration
 |-- data/                  # DVC pointers only
 |-- docker/
 |-- k8s/
 |-- notebooks/
 |-- src/factoryvision/
 |   |-- data/
+|   |-- pipelines/baseline/ # Kedro nodes and pipeline definition
 |   |-- training/
 |   |-- inference/
 |   |-- api/
@@ -232,6 +234,7 @@ factoryvision-mlops/
 ## Project commands
 
 ```bash
+kedro run
 make train
 make serve
 make test
@@ -240,6 +243,39 @@ make k8s
 ```
 
 These are the intended developer entry points for the corresponding components.
+
+## Kedro configuration
+
+The baseline pipeline reads its experiment settings from `conf/base/parameters.yml`.
+The sections are intentionally separated by responsibility:
+
+| Section | Controls |
+| --- | --- |
+| `dataset` | DVC manifest path and target image dimensions |
+| `augmentation` | Training-only image/mask transforms and their probabilities |
+| `model` | U-Net input channels, output channels, and base feature width |
+| `training` | Seed, deterministic mode, device, optimizer, loss, batch size, epochs, and output directory |
+| `evaluation` | Probability threshold and qualitative examples per class |
+
+Edit those YAML values before running `kedro run`; the Python pipeline code does not need to change for ordinary experiments. Training augmentations are applied to the image and mask together, while validation augmentations are disabled so evaluation remains comparable across runs. Machine-specific overrides can be placed in `conf/local/`.
+
+## MLflow experiment tracking
+
+Kedro training runs are tracked locally with MLflow. The tracking configuration is in the `tracking` section of `conf/base/parameters.yml`; the default backend is the SQLite database `artifacts/mlflow.db`, and generated artifacts remain under the ignored `artifacts/` directory.
+
+Run the pipeline to create an experiment run:
+
+```powershell
+.venv\Scripts\kedro.exe run
+```
+
+Start the local MLflow UI in a second terminal:
+
+```powershell
+.venv\Scripts\mlflow.exe ui --backend-store-uri sqlite:///artifacts/mlflow.db
+```
+
+Then open `http://127.0.0.1:5000`. Each run contains the flattened configuration parameters, per-epoch losses and metrics, the best checkpoint, the training history/configuration files, and the validation prediction overlay.
 
 ## Definition of done
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import cv2
 import pandas as pd
@@ -29,10 +30,12 @@ class KolektorSDD2Dataset(Dataset[tuple[Tensor, Tensor]]):
         manifest_path: str | Path = "data/processed/splits.csv",
         split: DatasetSplit = "train",
         image_size: ImageSize = (640, 256),
+        augmentations: dict[str, Any] | None = None,
     ) -> None:
         self.manifest_path = Path(manifest_path).resolve()
         self.repo_root = self.manifest_path.parents[2]
         self.image_size = image_size
+        self.augmentations = augmentations or {"enabled": False}
 
         if not self.manifest_path.exists():
             raise FileNotFoundError(f"Manifest not found: {self.manifest_path}")
@@ -117,6 +120,8 @@ class KolektorSDD2Dataset(Dataset[tuple[Tensor, Tensor]]):
             value=0,
         )
 
+        image, mask = self._apply_augmentations(image, mask)
+
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image_tensor = torch.from_numpy(image.transpose(2, 0, 1).copy()).float()
         image_tensor = image_tensor / 255.0
@@ -124,3 +129,35 @@ class KolektorSDD2Dataset(Dataset[tuple[Tensor, Tensor]]):
         mask_tensor = torch.from_numpy((mask > 0).astype("float32")).unsqueeze(0)
 
         return image_tensor, mask_tensor
+
+    def _apply_augmentations(
+        self,
+        image: Any,
+        mask: Any,
+    ) -> tuple[Any, Any]:
+        """Apply configured spatial transforms to an image/mask pair."""
+
+        if self.split != "train" or not self.augmentations.get("enabled", False):
+            return image, mask
+
+        horizontal_probability = float(
+            self.augmentations.get("horizontal_flip_probability", 0.0)
+        )
+        vertical_probability = float(
+            self.augmentations.get("vertical_flip_probability", 0.0)
+        )
+        for name, probability in (
+            ("horizontal_flip_probability", horizontal_probability),
+            ("vertical_flip_probability", vertical_probability),
+        ):
+            if not 0.0 <= probability <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1")
+
+        if random.random() < horizontal_probability:
+            image = cv2.flip(image, 1)
+            mask = cv2.flip(mask, 1)
+        if random.random() < vertical_probability:
+            image = cv2.flip(image, 0)
+            mask = cv2.flip(mask, 0)
+
+        return image, mask

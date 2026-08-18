@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
+
+
+@dataclass(frozen=True)
+class UNetConfig:
+    """Configurable architectural values for the baseline U-Net."""
+
+    in_channels: int = 3
+    out_channels: int = 1
+    base_channels: int = 32
 
 
 class DoubleConv(nn.Module):
