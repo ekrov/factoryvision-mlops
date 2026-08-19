@@ -277,6 +277,99 @@ Start the local MLflow UI in a second terminal:
 
 Then open `http://127.0.0.1:5000`. Each run contains the flattened configuration parameters, per-epoch losses and metrics, the best checkpoint, the training history/configuration files, and the validation prediction overlay.
 
+To run the controlled mini-study, use the same split, seed, and epoch budget for each configuration:
+
+```powershell
+.venv\Scripts\python.exe scripts\run_mini_study.py --limit 3 --epochs 2
+```
+
+The study compares the baseline, a lower learning rate, and a balanced BCE/Dice loss. It selects the winner by final IoU, using defect-level F1 as a tie-breaker, and writes the comparison to `artifacts/mini-study/results.csv`.
+
+Mini-study snapshot, using two epochs on CUDA with the same seed and official split:
+
+| Configuration | Learning rate | BCE/Dice weights | Final IoU | Final Dice | Defect F1 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 0.001 | 0.25 / 0.75 | 0.0489 | 0.0932 | 0.5029 |
+| Lower learning rate | 0.0003 | 0.25 / 0.75 | 0.0155 | 0.0306 | 0.3896 |
+| Balanced loss | 0.001 | 0.50 / 0.50 | 0.0211 | 0.0413 | 0.2623 |
+
+The baseline was selected by final IoU. These are deliberately short comparison runs, so the winner is a candidate for a longer training run rather than a final quality claim.
+
+## MLflow Model Registry
+
+The selected mini-study winner can be registered as the versioned MLflow model `factoryvision-segmentation`:
+
+```powershell
+.venv\Scripts\python.exe scripts\register_best_model.py
+```
+
+The script reads `artifacts/mini-study/winner.json`, retrieves that run's tracked `model/best.pt` artifact, rebuilds the U-Net from the run's logged architecture parameters, and logs the complete PyTorch model with an input/output signature. MLflow then creates a model version in the local registry stored in `artifacts/mlflow.db` and assigns the version the `candidate` alias.
+
+The registered model can be loaded by alias:
+
+```python
+import mlflow.pytorch
+
+model = mlflow.pytorch.load_model(
+    "models:/factoryvision-segmentation@candidate"
+)
+```
+
+The alias identifies the currently selected candidate without putting model binaries in Git. The registration is intentionally local for now; the MLflow database and model artifacts are ignored by Git and can later be moved to a shared MLflow server or artifact store.
+
+## Reproducibility
+
+FactoryVision uses explicit configuration and deterministic seed handling so experiments can be repeated consistently.
+
+### Reproduce the baseline run
+
+Use Python 3.11 and install the project dependencies:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+Restore the DVC-tracked dataset and verify that the reusable split manifest exists:
+
+```powershell
+.venv\Scripts\dvc.exe pull
+```
+
+```text
+data/processed/splits.csv
+```
+
+The training configuration is in `conf/base/parameters.yml`. The important reproducibility settings are:
+
+```yaml
+training:
+  seed: 42
+  deterministic: true
+  device: cuda
+```
+
+Run the complete Kedro pipeline:
+
+```powershell
+.venv\Scripts\kedro.exe run
+```
+
+The run produces training and validation losses, segmentation metrics, the best checkpoint, validation prediction overlays, and an MLflow experiment run.
+
+### What is made deterministic?
+
+The configured seed is applied to Python's random number generator, NumPy, PyTorch, CUDA, DataLoader workers, and the weighted training sampler. When `deterministic: true`, PyTorch also requests deterministic algorithm behavior where supported.
+
+### What is recorded?
+
+Each MLflow run records the dataset manifest, image size, model architecture, learning rate, loss weights, batch size, epoch count, seed, and selected device. It also stores the training history, best checkpoint, configuration file, and validation prediction examples.
+
+### Reproducibility limitations
+
+Deterministic settings improve repeatability but do not guarantee identical results across every machine. Small differences may still occur because of different PyTorch or CUDA versions, GPU hardware, CPU versus GPU execution, unsupported nondeterministic operations, or changes to the dataset and split manifest.
+
+For the closest comparison, use the same Python version, dependency versions, dataset manifest, seed, image size, device type, and hyperparameters.
+
 ## Definition of done
 
 - A fresh clone can reproduce training or inference from documented commands.
