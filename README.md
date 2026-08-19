@@ -370,6 +370,77 @@ Deterministic settings improve repeatability but do not guarantee identical resu
 
 For the closest comparison, use the same Python version, dependency versions, dataset manifest, seed, image size, device type, and hyperparameters.
 
+## ONNX export
+
+The registered MLflow candidate can be exported to ONNX with:
+
+```powershell
+.venv\Scripts\python.exe scripts\export_onnx.py
+```
+
+The script loads `models:/factoryvision-segmentation@candidate`, exports the U-Net graph and trained weights, validates the ONNX file, and compares one ONNX Runtime prediction with the original PyTorch prediction. The exported model keeps the segmentation output as logits:
+
+```text
+Input:  images — (batch_size, 3, 256, 640) float32
+Output: logits — (batch_size, 1, 256, 640) float32
+```
+
+The batch dimension is dynamic, while the image height and width remain the configured `256 x 640` size. The generated file is stored at `artifacts/models/factoryvision-segmentation.onnx` and remains outside Git because generated artifacts are ignored. The initial verification produced a maximum absolute difference of `2.29e-05` between PyTorch and ONNX Runtime outputs.
+
+## PyTorch versus ONNX Runtime benchmark
+
+Run the controlled CPU benchmark with:
+
+```powershell
+.venv\Scripts\python.exe scripts\benchmark_inference.py
+```
+
+The benchmark uses the registered PyTorch model and the exported ONNX model with the same `1 x 3 x 256 x 640` input, one CPU thread, 10 warm-up runs, and 30 measured runs by default. It reports mean latency, p95 latency, throughput, model size, and output agreement. The PyTorch size is the complete MLflow model bundle; the ONNX size is the generated ONNX file.
+
+The initial benchmark used 5 warm-up runs and 20 measured runs on CPU:
+
+| Runtime | Model size | Mean latency | p95 latency | Throughput |
+| --- | ---: | ---: | ---: | ---: |
+| PyTorch via MLflow | 40.311 MB | 830.17 ms | 842.97 ms | 1.205 images/s |
+| ONNX Runtime | 29.613 MB | 669.14 ms | 683.99 ms | 1.494 images/s |
+
+In this comparison, ONNX Runtime reduced mean latency by approximately 19% and increased throughput by approximately 24%. The maximum absolute output difference was `2.29e-05`, so the speed comparison did not come at the cost of a meaningful prediction change. These numbers are CPU- and hardware-specific; the benchmark should be rerun on the target deployment machine.
+
+## FastAPI inference service
+
+The local API loads the exported ONNX model once at startup and exposes three endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Reports whether the service and model are ready. |
+| `GET /model-info` | Returns the model alias, runtime, tensor shapes, and threshold. |
+| `POST /predict` | Accepts an image and returns a defect mask, score, and bounding box. |
+
+Start the service from the repository root:
+
+```powershell
+.venv\Scripts\uvicorn.exe factoryvision.api.main:app --host 127.0.0.1 --port 8000
+```
+
+Then open the interactive API documentation at `http://127.0.0.1:8000/docs`.
+
+Example requests from PowerShell:
+
+```powershell
+curl.exe http://127.0.0.1:8000/health
+curl.exe http://127.0.0.1:8000/model-info
+curl.exe -X POST http://127.0.0.1:8000/predict -F "file=@path\\to\\inspection.png"
+```
+
+The prediction response contains `defect_probability`, `defect_area_fraction`, `has_defect`, a `bounding_box` when defect pixels are present, and a base64-encoded PNG in `mask_base64`. The mask is produced at `256 x 640`, while the original image dimensions are also returned. The service uses the same aspect-preserving resize, letterboxing, RGB conversion, and `[0, 1]` normalization as the training dataset loader.
+
+The default model path is `artifacts/models/factoryvision-segmentation.onnx`. It can be overridden without changing code:
+
+```powershell
+$env:FACTORYVISION_ONNX_MODEL = "C:\\models\\factoryvision-segmentation.onnx"
+$env:FACTORYVISION_THRESHOLD = "0.5"
+```
+
 ## Definition of done
 
 - A fresh clone can reproduce training or inference from documented commands.
