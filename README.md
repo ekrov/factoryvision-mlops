@@ -169,7 +169,8 @@ Prediction logs will be stored in PostgreSQL with image ID, timestamp, model ver
 
 ### Containers, Kubernetes, and monitoring
 
-- Build a multi-stage Docker image.
+- The FastAPI service is packaged in a verified multi-stage Docker image defined by [`Dockerfile`](Dockerfile). The builder stage installs the Python package and runtime dependencies, while the smaller runtime stage runs Uvicorn as a non-root user and exposes a container health check.
+- Build the API image locally with `docker build --tag factoryvision-api:day5 .`.
 - Add Docker Compose for the API, PostgreSQL, MLflow, Prometheus, and Grafana.
 - Create Kubernetes Deployment, Service, ConfigMap, and resource-limit manifests.
 - Run the stack locally with kind, k3d, or minikube.
