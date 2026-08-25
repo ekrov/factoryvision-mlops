@@ -101,6 +101,7 @@ The FastAPI service will provide:
 | `POST /predict` | Accept an image and return a defect mask, probability, and bounding box |
 | `GET /health` | Liveness and service health check |
 | `GET /model-info` | Model version, evaluation metrics, and runtime metadata |
+| `GET /metrics` | Prometheus-formatted service and inference metrics |
 
 The service will include request validation, clear error responses, automated `pytest` tests, and a comparison between PyTorch and ONNX Runtime inference.
 
@@ -171,7 +172,7 @@ Prediction logs will be stored in PostgreSQL with image ID, timestamp, model ver
 
 - The FastAPI service is packaged in a verified multi-stage Docker image defined by [`Dockerfile`](Dockerfile). The builder stage installs the Python package and runtime dependencies, while the smaller runtime stage runs Uvicorn as a non-root user and exposes a container health check.
 - Build the API image locally with `docker build --tag factoryvision-api:day5 .`.
-- Add Docker Compose for the API, PostgreSQL, MLflow, Prometheus, and Grafana.
+- Docker Compose starts the API, PostgreSQL, MLflow, Prometheus, and Grafana as a connected local stack.
 - Create Kubernetes Deployment, Service, ConfigMap, and resource-limit manifests.
 - Run the stack locally with kind, k3d, or minikube.
 
@@ -471,9 +472,9 @@ $env:FACTORYVISION_DATABASE_URL = "postgresql+psycopg://user:password@host:5432/
 
 After a successful `/predict` request, the API stores the prediction metadata. If inference fails after the image has been read, it stores an error record with the measured latency and error message. The `/health` response includes `storage_ready` so database readiness is visible.
 
-## Run the API, PostgreSQL, and Airflow with Docker
+## Run the local platform with Docker Compose
 
-The repository includes a multi-stage [Dockerfile](Dockerfile), an Airflow image definition at `docker/Dockerfile.airflow`, and a `docker-compose.yml`. Compose starts the API, PostgreSQL, and the Airflow scheduler, DAG processor, and API server. Airflow uses the same PostgreSQL service for its metadata and for FactoryVision prediction records; the Airflow tables and application tables coexist in that database. The serving and batch images install runtime dependencies only; the large training and CUDA-related dependencies remain available through the optional `training` extra for local development.
+The repository includes a multi-stage [Dockerfile](Dockerfile), an Airflow image definition at `docker/Dockerfile.airflow`, monitoring configuration under `monitoring/`, and a `docker-compose.yml`. Compose starts the API, PostgreSQL, MLflow, Prometheus, Grafana, and the Airflow scheduler, DAG processor, and API server. Airflow and FactoryVision use the `factoryvision` PostgreSQL database, while MLflow uses a separate `mlflow` database created by the Compose initialization service. The serving and batch images install runtime dependencies only; the large training and CUDA-related dependencies remain available through the optional `training` extra for local development.
 
 The ONNX model is intentionally not stored in Git because it is a generated artifact. Generate it locally first:
 
@@ -484,15 +485,25 @@ The ONNX model is intentionally not stored in Git because it is a generated arti
 Then build and start the stack:
 
 ```powershell
-docker-compose up --build
+docker compose up --build
 ```
 
-Docker Compose v2 users can use the equivalent `docker compose up --build` command.
+The local services are available at:
+
+| Service | URL |
+| --- | --- |
+| FactoryVision API | `http://localhost:8000` |
+| MLflow | `http://localhost:5000` |
+| Grafana | `http://localhost:3000` |
+| Prometheus | `http://localhost:9090` |
+| Airflow | `http://localhost:8080` |
+
+Prometheus scrapes `http://api:8000/metrics` over the Compose network, and Grafana is provisioned with Prometheus as its default datasource. The local Grafana credentials are `admin` / `factoryvision`.
 
 The API is available at `http://127.0.0.1:8000`, the interactive documentation is at `http://127.0.0.1:8000/docs`, and Airflow is available at `http://127.0.0.1:8080`. The local Airflow username is `airflow`. The first initialization generates its password in `simple_auth_manager_passwords.json`; read it with:
 
 ```powershell
-docker-compose exec airflow-api-server cat /opt/airflow/simple_auth_manager_passwords.json
+docker compose exec airflow-api-server cat /opt/airflow/simple_auth_manager_passwords.json
 ```
 
 This Simple Auth Manager setup is for local development only; use a production-grade auth manager before exposing Airflow beyond the local machine.
@@ -500,10 +511,10 @@ This Simple Auth Manager setup is for local development only; use a production-g
 The model is mounted read-only from `artifacts/models/` into the API container. If that file is missing, the API container will fail its health check with a clear model-not-found error. Stop the stack while preserving database rows with:
 
 ```powershell
-docker-compose down
+docker compose down
 ```
 
-To remove the PostgreSQL data volume as well, use `docker-compose down --volumes`.
+To remove the PostgreSQL, MLflow, Prometheus, and Grafana data volumes as well, use `docker compose down --volumes`.
 
 ### Trigger the batch DAG
 

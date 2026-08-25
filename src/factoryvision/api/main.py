@@ -6,13 +6,20 @@ from contextlib import asynccontextmanager
 import time
 from typing import AsyncIterator
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.exc import SQLAlchemyError
 
 from .inference import InferenceConfig, InvalidImageError, OnnxSegmenter
 from .schemas import HealthResponse, ModelInfoResponse, PredictionResponse
 from factoryvision.storage.database import create_database_engine, initialize_database
 from factoryvision.storage.repository import PredictionRepository, image_id_from_bytes
+from factoryvision.monitoring.metrics import (
+    HTTP_LATENCY,
+    HTTP_REQUESTS,
+    MODEL_INFO,
+    PREDICTIONS,
+    metrics_payload,
+)
 
 
 def create_app(
@@ -51,12 +58,47 @@ def create_app(
         lifespan=lifespan,
     )
 
+    @app.middleware("http")
+    async def collect_http_metrics(request: Request, call_next):
+        started_at = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            route = request.scope.get("route")
+            path = getattr(route, "path", request.url.path)
+            HTTP_REQUESTS.labels(request.method, path, "500").inc()
+            HTTP_LATENCY.labels(request.method, path).observe(
+                time.perf_counter() - started_at
+            )
+            raise
+        route = request.scope.get("route")
+        path = getattr(route, "path", request.url.path)
+        HTTP_REQUESTS.labels(request.method, path, str(response.status_code)).inc()
+        HTTP_LATENCY.labels(request.method, path).observe(
+            time.perf_counter() - started_at
+        )
+        return response
+
+    @app.get("/metrics", include_in_schema=False)
+    def metrics() -> Response:
+        """Expose API metrics for Prometheus scraping."""
+
+        payload, content_type = metrics_payload()
+        return Response(content=payload, media_type=content_type)
+
     @app.get("/health", response_model=HealthResponse)
     def health(request: Request) -> HealthResponse:
         """Report service liveness and model readiness."""
 
         loaded = getattr(request.app.state, "segmenter", None) is not None
         storage_ready = getattr(request.app.state, "prediction_store", None) is not None
+        if loaded:
+            segmenter = request.app.state.segmenter
+            MODEL_INFO.labels(
+                segmenter.config.model_name,
+                segmenter.config.model_alias,
+                segmenter.runtime_name,
+            ).set(1)
         return HealthResponse(
             status="ok" if loaded and storage_ready else "degraded",
             model_loaded=loaded,
@@ -137,6 +179,11 @@ def create_app(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Could not process the image: {error}",
             ) from error
+        PREDICTIONS.labels(
+            "defect" if prediction.has_defect else "no_defect",
+            segmenter.config.model_name,
+            segmenter.config.model_alias,
+        ).inc()
         latency_ms = (time.perf_counter() - started_at) * 1000.0
         try:
             prediction_store.save_success(

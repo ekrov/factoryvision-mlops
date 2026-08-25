@@ -108,6 +108,17 @@ def test_health_and_model_info(tmp_path) -> None:
         assert info.json()["input_shape"] == [1, 3, 256, 640]
 
 
+def test_metrics_endpoint_exposes_prometheus_format(tmp_path) -> None:
+    store = _prediction_store(tmp_path)
+    with TestClient(
+        create_app(segmenter=FakeSegmenter(), prediction_store=store)
+    ) as client:
+        response = client.get("/metrics")
+
+        assert response.status_code == 200
+        assert "factoryvision_http_requests_total" in response.text
+
+
 def test_predict_returns_mask_score_and_bounding_box(tmp_path) -> None:
     store = _prediction_store(tmp_path)
     upload = _image_upload()

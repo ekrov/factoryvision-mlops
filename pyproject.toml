@@ -15,6 +15,7 @@ dependencies = [
     "uvicorn==0.52.3",
     "python-multipart==0.0.20",
     "onnxruntime==1.20.1",
+    "prometheus-client==0.22.1",
     "sqlalchemy==2.0.52",
     "psycopg[binary]==3.2.13",
 ]
