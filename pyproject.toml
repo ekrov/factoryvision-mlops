@@ -29,6 +29,9 @@ training = [
     "mlflow==3.14.0",
     "onnx==1.17.0",
 ]
+analytics = [
+    "pyspark==3.5.6",
+]
 dev = [
     "dvc==3.67.1",
     "jupyter==1.1.1",

@@ -20,6 +20,7 @@ data/dvc-remote/
 
 # Generated training runs and model checkpoints.
 artifacts/
+spark-warehouse/
 
 # Airflow runtime logs and local batch hand-off files.
 airflow/logs/

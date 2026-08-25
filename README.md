@@ -535,6 +535,29 @@ The batch image directory, artifact directory, database URL, model path, and opt
 
 The Compose setup follows the structure of the [official Airflow Docker guidance](https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/), while using a project-specific image so the DAG can import FactoryVision's ONNX and PostgreSQL code.
 
+## PySpark prediction analytics
+
+The Day 4 analytics job is [`spark/daily_prediction_statistics.py`](spark/daily_prediction_statistics.py). It reads the PostgreSQL `predictions` table through Spark JDBC and produces daily statistics grouped by prediction date, model name, model alias, and derived defect status. Successful predictions are classified as `defect` or `no_defect` using the configured probability threshold; failed inference records are retained as `error`.
+
+Install the optional PySpark dependency:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -e ".[analytics]"
+```
+
+Run the job locally with the PostgreSQL JDBC driver:
+
+```powershell
+$env:FACTORYVISION_DATABASE_URL = "postgresql+psycopg://factoryvision:factoryvision@localhost:5432/factoryvision"
+.venv\Scripts\spark-submit.cmd `
+  --packages org.postgresql:postgresql:42.7.4 `
+  spark\daily_prediction_statistics.py
+```
+
+The default Parquet output is written to `artifacts/spark/daily_prediction_statistics`. The output includes prediction counts, average defect probability, average latency, total/successful predictions, defect/error counts, defect rate, and error rate. Use `--format csv` or `--format json` for an interchange format. The JDBC driver is provided with `--packages` because Spark's JDBC reader requires a database-specific driver on its classpath. PySpark 3.5.6 is used here because it supports the project's Python 3.11 environment and Java 8/11/17; Apache Spark's installation and JDBC documentation describe these compatibility and driver requirements.
+
+On Windows, Spark 3.5.6 may also require Hadoop `winutils.exe` with `HADOOP_HOME` set when staging JDBC jars or writing output files. If that is not configured, run the job in a Linux/Docker Spark environment. The DataFrame aggregation tests do not require `winutils.exe`.
+
 ## Definition of done
 
 - A fresh clone can reproduce training or inference from documented commands.
