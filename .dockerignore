@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.dvc
+artifacts
+data/raw
+notebooks
+tests
+instructions.md
+factoryvision-notion.md

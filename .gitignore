@@ -20,3 +20,8 @@ data/dvc-remote/
 
 # Generated training runs and model checkpoints.
 artifacts/
+
+# Airflow runtime logs and local batch hand-off files.
+airflow/logs/
+data/batch/incoming/*
+!data/batch/incoming/.gitkeep

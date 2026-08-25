@@ -9,25 +9,29 @@ description = "Production-oriented industrial surface defect segmentation and ML
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "torch==2.5.1",
-    "torchvision==0.20.1",
     "numpy==2.2.1",
-    "pandas==2.3.1",
-    "opencv-python==4.13.0.92",
-    "matplotlib==3.10.0",
-    "kedro==1.5.0",
-    "mlflow==3.14.0",
+    "opencv-python-headless==4.13.0.92",
     "fastapi==0.141.1",
     "uvicorn==0.52.3",
     "python-multipart==0.0.20",
+    "onnxruntime==1.20.1",
+    "sqlalchemy==2.0.52",
+    "psycopg[binary]==3.2.13",
 ]
 
 [project.optional-dependencies]
+training = [
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "pandas==2.3.1",
+    "matplotlib==3.10.0",
+    "kedro==1.5.0",
+    "mlflow==3.14.0",
+    "onnx==1.17.0",
+]
 dev = [
     "dvc==3.67.1",
     "jupyter==1.1.1",
-    "onnx==1.17.0",
-    "onnxruntime==1.20.1",
     "pytest==9.0.3",
 ]
 

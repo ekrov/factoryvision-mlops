@@ -1,0 +1,26 @@
+FROM apache/airflow:3.3.0-python3.11
+
+USER root
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md /tmp/factoryvision/
+COPY src /tmp/factoryvision/src
+COPY docker/airflow/init.sh /usr/local/bin/factoryvision-airflow-init.sh
+
+RUN chmod +x /usr/local/bin/factoryvision-airflow-init.sh
+RUN chown -R airflow:root /tmp/factoryvision
+
+USER airflow
+
+# Keep batch runtime dependencies aligned with the serving project. Airflow
+# itself comes from the pinned official base image above.
+RUN pip install --no-cache-dir \
+        numpy==2.2.1 \
+        opencv-python-headless==4.13.0.92 \
+        onnxruntime==1.20.1 \
+        sqlalchemy==2.0.52 \
+        "psycopg[binary]==3.2.13" \
+    && pip install --no-cache-dir --no-deps /tmp/factoryvision

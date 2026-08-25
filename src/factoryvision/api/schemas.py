@@ -19,6 +19,7 @@ class HealthResponse(BaseModel):
 
     status: str
     model_loaded: bool
+    storage_ready: bool
 
 
 class ModelInfoResponse(BaseModel):

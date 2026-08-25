@@ -326,7 +326,7 @@ FactoryVision uses explicit configuration and deterministic seed handling so exp
 Use Python 3.11 and install the project dependencies:
 
 ```powershell
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\python.exe -m pip install -e ".[training,dev]"
 ```
 
 Restore the DVC-tracked dataset and verify that the reusable split manifest exists:
@@ -412,7 +412,7 @@ The local API loads the exported ONNX model once at startup and exposes three en
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /health` | Reports whether the service and model are ready. |
+| `GET /health` | Reports whether the service, model, and prediction storage are ready. |
 | `GET /model-info` | Returns the model alias, runtime, tensor shapes, and threshold. |
 | `POST /predict` | Accepts an image and returns a defect mask, score, and bounding box. |
 
@@ -440,6 +440,100 @@ The default model path is `artifacts/models/factoryvision-segmentation.onnx`. It
 $env:FACTORYVISION_ONNX_MODEL = "C:\\models\\factoryvision-segmentation.onnx"
 $env:FACTORYVISION_THRESHOLD = "0.5"
 ```
+
+## PostgreSQL prediction storage
+
+The API persists one row for each inspected image in a `predictions` table. The row contains a SHA-256 image identifier, timestamp, model name and alias, defect score, defect area, bounding-box coordinates, inference latency, and a `success` or `error` status. The binary mask remains in the API response rather than being stored as a large Base64 value in PostgreSQL.
+
+The default database URL is:
+
+```text
+postgresql+psycopg://factoryvision:factoryvision@localhost:5432/factoryvision
+```
+
+For local development, start PostgreSQL with Docker:
+
+```powershell
+docker run --name factoryvision-postgres `
+  -e POSTGRES_DB=factoryvision `
+  -e POSTGRES_USER=factoryvision `
+  -e POSTGRES_PASSWORD=factoryvision `
+  -p 5432:5432 `
+  -d postgres:16
+```
+
+The API creates the table at startup. To point it at another database, set:
+
+```powershell
+$env:FACTORYVISION_DATABASE_URL = "postgresql+psycopg://user:password@host:5432/database"
+```
+
+After a successful `/predict` request, the API stores the prediction metadata. If inference fails after the image has been read, it stores an error record with the measured latency and error message. The `/health` response includes `storage_ready` so database readiness is visible.
+
+## Run the API, PostgreSQL, and Airflow with Docker
+
+The repository includes a multi-stage [Dockerfile](Dockerfile), an Airflow image definition at `docker/Dockerfile.airflow`, and a `docker-compose.yml`. Compose starts the API, PostgreSQL, and the Airflow scheduler, DAG processor, and API server. Airflow uses the same PostgreSQL service for its metadata and for FactoryVision prediction records; the Airflow tables and application tables coexist in that database. The serving and batch images install runtime dependencies only; the large training and CUDA-related dependencies remain available through the optional `training` extra for local development.
+
+The ONNX model is intentionally not stored in Git because it is a generated artifact. Generate it locally first:
+
+```powershell
+.venv\Scripts\python.exe scripts\export_onnx.py
+```
+
+Then build and start the stack:
+
+```powershell
+docker-compose up --build
+```
+
+Docker Compose v2 users can use the equivalent `docker compose up --build` command.
+
+The API is available at `http://127.0.0.1:8000`, the interactive documentation is at `http://127.0.0.1:8000/docs`, and Airflow is available at `http://127.0.0.1:8080`. The local Airflow username is `airflow`. The first initialization generates its password in `simple_auth_manager_passwords.json`; read it with:
+
+```powershell
+docker-compose exec airflow-api-server cat /opt/airflow/simple_auth_manager_passwords.json
+```
+
+This Simple Auth Manager setup is for local development only; use a production-grade auth manager before exposing Airflow beyond the local machine.
+
+The model is mounted read-only from `artifacts/models/` into the API container. If that file is missing, the API container will fail its health check with a clear model-not-found error. Stop the stack while preserving database rows with:
+
+```powershell
+docker-compose down
+```
+
+To remove the PostgreSQL data volume as well, use `docker-compose down --volumes`.
+
+### Trigger the batch DAG
+
+The DAG is defined in [`airflow/dags/factoryvision_batch.py`](airflow/dags/factoryvision_batch.py) with the ID `factoryvision_batch_inference`. It runs daily at midnight UTC and is paused when first created so that a local user can inspect the configuration before processing files.
+
+Place new inspection images in:
+
+```text
+data/batch/incoming/
+```
+
+Then open Airflow, unpause `factoryvision_batch_inference`, and trigger it manually from the UI. The DAG performs these tasks in order:
+
+```text
+discover_images
+    -> validate_images
+    -> run_batch_inference
+    -> persist_results
+    -> generate_summary
+```
+
+The discovery task uses the image's SHA-256 content ID and skips images already present in `predictions`. Validation confirms that OpenCV can decode each file. Inference writes a compact hand-off file, `persist_results` writes prediction metadata to PostgreSQL, and the final task writes a JSON summary. Each run produces files under:
+
+```text
+artifacts/batch/<airflow-run-id>/predictions.json
+artifacts/batch/<airflow-run-id>/summary.json
+```
+
+The batch image directory, artifact directory, database URL, model path, and optional maximum number of images can be changed with `FACTORYVISION_BATCH_IMAGE_DIR`, `FACTORYVISION_BATCH_ARTIFACT_DIR`, `FACTORYVISION_DATABASE_URL`, `FACTORYVISION_ONNX_MODEL`, and `FACTORYVISION_BATCH_MAX_IMAGES`. The implementation can also be tested without Airflow because the reusable functions live in `src/factoryvision/batch/`.
+
+The Compose setup follows the structure of the [official Airflow Docker guidance](https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/), while using a project-specific image so the DAG can import FactoryVision's ONNX and PostgreSQL code.
 
 ## Definition of done
 

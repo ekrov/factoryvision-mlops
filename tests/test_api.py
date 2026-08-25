@@ -8,10 +8,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
 
 from factoryvision.api.inference import InferenceConfig, Prediction
 from factoryvision.api.main import create_app
 from factoryvision.api.schemas import BoundingBox, PredictionResponse
+from factoryvision.storage.database import initialize_database
+from factoryvision.storage.repository import PredictionRepository, image_id_from_bytes
 
 
 class FakeSegmenter:
@@ -80,21 +83,38 @@ def _image_upload() -> tuple[str, bytes, str]:
     return "sample.png", encoded.tobytes(), "image/png"
 
 
-def test_health_and_model_info() -> None:
-    with TestClient(create_app(segmenter=FakeSegmenter())) as client:
+def _prediction_store(tmp_path) -> PredictionRepository:
+    engine = create_engine(f"sqlite:///{tmp_path / 'predictions.db'}")
+    initialize_database(engine)
+    return PredictionRepository.from_engine(engine)
+
+
+def test_health_and_model_info(tmp_path) -> None:
+    store = _prediction_store(tmp_path)
+    with TestClient(
+        create_app(segmenter=FakeSegmenter(), prediction_store=store)
+    ) as client:
         health = client.get("/health")
         info = client.get("/model-info")
 
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "model_loaded": True}
+        assert health.json() == {
+            "status": "ok",
+            "model_loaded": True,
+            "storage_ready": True,
+        }
         assert info.status_code == 200
         assert info.json()["runtime"] == "onnxruntime"
         assert info.json()["input_shape"] == [1, 3, 256, 640]
 
 
-def test_predict_returns_mask_score_and_bounding_box() -> None:
-    with TestClient(create_app(segmenter=FakeSegmenter())) as client:
-        response = client.post("/predict", files={"file": _image_upload()})
+def test_predict_returns_mask_score_and_bounding_box(tmp_path) -> None:
+    store = _prediction_store(tmp_path)
+    upload = _image_upload()
+    with TestClient(
+        create_app(segmenter=FakeSegmenter(), prediction_store=store)
+    ) as client:
+        response = client.post("/predict", files={"file": upload})
 
         assert response.status_code == 200
         body = response.json()
@@ -108,10 +128,19 @@ def test_predict_returns_mask_score_and_bounding_box() -> None:
         }
         assert body["mask_media_type"] == "image/png"
         assert body["mask_base64"]
+        record = store.latest_for_image(image_id_from_bytes(upload[1]))
+        assert record is not None
+        assert record.status == "success"
+        assert record.model_name == "factoryvision-segmentation"
+        assert record.defect_probability == 0.91
+        assert record.latency_ms >= 0.0
 
 
-def test_predict_rejects_non_image_content_type() -> None:
-    with TestClient(create_app(segmenter=FakeSegmenter())) as client:
+def test_predict_rejects_non_image_content_type(tmp_path) -> None:
+    store = _prediction_store(tmp_path)
+    with TestClient(
+        create_app(segmenter=FakeSegmenter(), prediction_store=store)
+    ) as client:
         response = client.post(
             "/predict",
             files={"file": ("sample.txt", b"not an image", "text/plain")},
@@ -120,13 +149,16 @@ def test_predict_rejects_non_image_content_type() -> None:
         assert response.status_code == 415
 
 
-def test_predict_rejects_oversized_upload() -> None:
+def test_predict_rejects_oversized_upload(tmp_path) -> None:
     segmenter = FakeSegmenter()
     segmenter.config = InferenceConfig(
         model_path=Path("fake.onnx"),
         max_upload_bytes=4,
     )
-    with TestClient(create_app(segmenter=segmenter)) as client:
+    store = _prediction_store(tmp_path)
+    with TestClient(
+        create_app(segmenter=segmenter, prediction_store=store)
+    ) as client:
         response = client.post(
             "/predict",
             files={"file": ("sample.png", b"12345", "image/png")},
