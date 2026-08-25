@@ -10,10 +10,20 @@ HTTP_REQUESTS = Counter(
     "Total number of HTTP requests handled by the API.",
     ("method", "path", "status"),
 )
+HTTP_ERRORS = Counter(
+    "factoryvision_http_errors_total",
+    "Total number of HTTP requests that returned a client or server error.",
+    ("method", "path", "status"),
+)
 HTTP_LATENCY = Histogram(
     "factoryvision_http_request_duration_seconds",
     "HTTP request duration in seconds.",
     ("method", "path"),
+)
+INFERENCE_LATENCY = Histogram(
+    "factoryvision_inference_duration_seconds",
+    "Model inference duration in seconds.",
+    ("model_name", "model_alias"),
 )
 PREDICTIONS = Counter(
     "factoryvision_predictions_total",

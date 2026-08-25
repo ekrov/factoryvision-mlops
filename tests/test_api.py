@@ -10,7 +10,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
-from factoryvision.api.inference import InferenceConfig, Prediction
+from factoryvision.api.inference import InvalidImageError, InferenceConfig, Prediction
 from factoryvision.api.main import create_app
 from factoryvision.api.schemas import BoundingBox, PredictionResponse
 from factoryvision.storage.database import initialize_database
@@ -22,8 +22,9 @@ class FakeSegmenter:
 
     runtime_name = "onnxruntime"
 
-    def __init__(self) -> None:
+    def __init__(self, has_defect: bool = True) -> None:
         self.config = InferenceConfig(model_path=Path("fake.onnx"))
+        self.has_defect = has_defect
 
     def model_info(self) -> dict[str, object]:
         return {
@@ -38,18 +39,23 @@ class FakeSegmenter:
     def predict(self, image_bytes: bytes) -> Prediction:
         del image_bytes
         mask = np.zeros((256, 640), dtype=np.uint8)
-        mask[10:30, 20:50] = 255
+        if self.has_defect:
+            mask[10:30, 20:50] = 255
         success, encoded = cv2.imencode(".png", mask)
         assert success
         return Prediction(
-            has_defect=True,
-            defect_probability=0.91,
+            has_defect=self.has_defect,
+            defect_probability=0.91 if self.has_defect else 0.1,
             defect_area_fraction=float((mask > 0).mean()),
-            bounding_box=BoundingBox(
-                x_min=20,
-                y_min=10,
-                x_max=49,
-                y_max=29,
+            bounding_box=(
+                BoundingBox(
+                    x_min=20,
+                    y_min=10,
+                    x_max=49,
+                    y_max=29,
+                )
+                if self.has_defect
+                else None
             ),
             mask_base64=base64.b64encode(encoded.tobytes()).decode("ascii"),
             original_image_height=32,
@@ -87,6 +93,17 @@ def _prediction_store(tmp_path) -> PredictionRepository:
     engine = create_engine(f"sqlite:///{tmp_path / 'predictions.db'}")
     initialize_database(engine)
     return PredictionRepository.from_engine(engine)
+
+
+def _metric_sample(metrics: str, name: str, **labels: str) -> str | None:
+    """Find a metric sample without depending on label serialization order."""
+
+    for line in metrics.splitlines():
+        if line.startswith(f"{name}{{") and all(
+            f'{key}="{value}"' in line for key, value in labels.items()
+        ):
+            return line
+    return None
 
 
 def test_health_and_model_info(tmp_path) -> None:
@@ -145,6 +162,37 @@ def test_predict_returns_mask_score_and_bounding_box(tmp_path) -> None:
         assert record.model_name == "factoryvision-segmentation"
         assert record.defect_probability == 0.91
         assert record.latency_ms >= 0.0
+        metrics = client.get("/metrics").text
+        assert "factoryvision_inference_duration_seconds_count" in metrics
+        assert _metric_sample(
+            metrics,
+            "factoryvision_predictions_total",
+            outcome="defect",
+            model_name="factoryvision-segmentation",
+            model_alias="candidate",
+        ) is not None
+
+
+def test_metrics_record_no_defect_prediction(tmp_path) -> None:
+    store = _prediction_store(tmp_path)
+    with TestClient(
+        create_app(
+            segmenter=FakeSegmenter(has_defect=False),
+            prediction_store=store,
+        )
+    ) as client:
+        response = client.post("/predict", files={"file": _image_upload()})
+
+        assert response.status_code == 200
+        assert response.json()["has_defect"] is False
+        metrics = client.get("/metrics").text
+        assert _metric_sample(
+            metrics,
+            "factoryvision_predictions_total",
+            outcome="no_defect",
+            model_name="factoryvision-segmentation",
+            model_alias="candidate",
+        ) is not None
 
 
 def test_predict_rejects_non_image_content_type(tmp_path) -> None:
@@ -158,6 +206,36 @@ def test_predict_rejects_non_image_content_type(tmp_path) -> None:
         )
 
         assert response.status_code == 415
+
+
+def test_metrics_record_prediction_error(tmp_path) -> None:
+    class ErrorSegmenter(FakeSegmenter):
+        def predict(self, image_bytes: bytes) -> Prediction:
+            del image_bytes
+            raise InvalidImageError("test image decoding failure")
+
+    store = _prediction_store(tmp_path)
+    with TestClient(
+        create_app(segmenter=ErrorSegmenter(), prediction_store=store)
+    ) as client:
+        response = client.post("/predict", files={"file": _image_upload()})
+
+        assert response.status_code == 400
+        metrics = client.get("/metrics").text
+        assert _metric_sample(
+            metrics,
+            "factoryvision_http_errors_total",
+            method="POST",
+            path="/predict",
+            status="400",
+        ) is not None
+        assert _metric_sample(
+            metrics,
+            "factoryvision_predictions_total",
+            outcome="error",
+            model_name="factoryvision-segmentation",
+            model_alias="candidate",
+        ) is not None
 
 
 def test_predict_rejects_oversized_upload(tmp_path) -> None:

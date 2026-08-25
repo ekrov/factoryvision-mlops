@@ -14,8 +14,10 @@ from .schemas import HealthResponse, ModelInfoResponse, PredictionResponse
 from factoryvision.storage.database import create_database_engine, initialize_database
 from factoryvision.storage.repository import PredictionRepository, image_id_from_bytes
 from factoryvision.monitoring.metrics import (
+    HTTP_ERRORS,
     HTTP_LATENCY,
     HTTP_REQUESTS,
+    INFERENCE_LATENCY,
     MODEL_INFO,
     PREDICTIONS,
     metrics_payload,
@@ -35,6 +37,11 @@ def create_app(
             app.state.segmenter = OnnxSegmenter(config)
         else:
             app.state.segmenter = segmenter
+        MODEL_INFO.labels(
+            app.state.segmenter.config.model_name,
+            app.state.segmenter.config.model_alias,
+            app.state.segmenter.runtime_name,
+        ).set(1)
         if prediction_store is None:
             engine = create_database_engine()
             initialize_database(engine)
@@ -60,20 +67,25 @@ def create_app(
 
     @app.middleware("http")
     async def collect_http_metrics(request: Request, call_next):
+        def request_path() -> str:
+            route = request.scope.get("route")
+            return getattr(route, "path", request.url.path)
+
         started_at = time.perf_counter()
         try:
             response = await call_next(request)
         except Exception:
-            route = request.scope.get("route")
-            path = getattr(route, "path", request.url.path)
+            path = request_path()
             HTTP_REQUESTS.labels(request.method, path, "500").inc()
+            HTTP_ERRORS.labels(request.method, path, "500").inc()
             HTTP_LATENCY.labels(request.method, path).observe(
                 time.perf_counter() - started_at
             )
             raise
-        route = request.scope.get("route")
-        path = getattr(route, "path", request.url.path)
+        path = request_path()
         HTTP_REQUESTS.labels(request.method, path, str(response.status_code)).inc()
+        if response.status_code >= 400:
+            HTTP_ERRORS.labels(request.method, path, str(response.status_code)).inc()
         HTTP_LATENCY.labels(request.method, path).observe(
             time.perf_counter() - started_at
         )
@@ -92,13 +104,6 @@ def create_app(
 
         loaded = getattr(request.app.state, "segmenter", None) is not None
         storage_ready = getattr(request.app.state, "prediction_store", None) is not None
-        if loaded:
-            segmenter = request.app.state.segmenter
-            MODEL_INFO.labels(
-                segmenter.config.model_name,
-                segmenter.config.model_alias,
-                segmenter.runtime_name,
-            ).set(1)
         return HealthResponse(
             status="ok" if loaded and storage_ready else "degraded",
             model_loaded=loaded,
@@ -149,6 +154,23 @@ def create_app(
             )
         image_id = image_id_from_bytes(image_bytes)
         started_at = time.perf_counter()
+        inference_started_at = time.perf_counter()
+        inference_labels = (
+            segmenter.config.model_name,
+            segmenter.config.model_alias,
+        )
+
+        def record_inference_duration() -> None:
+            INFERENCE_LATENCY.labels(*inference_labels).observe(
+                time.perf_counter() - inference_started_at
+            )
+
+        def record_prediction_outcome(outcome: str) -> None:
+            PREDICTIONS.labels(
+                outcome,
+                segmenter.config.model_name,
+                segmenter.config.model_alias,
+            ).inc()
 
         def save_failure(error_message: str) -> None:
             """Best-effort persistence for failed inference attempts."""
@@ -168,22 +190,26 @@ def create_app(
         try:
             prediction = segmenter.predict(image_bytes)
         except InvalidImageError as error:
+            record_inference_duration()
+            record_prediction_outcome("error")
             save_failure(str(error))
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(error),
             ) from error
         except (RuntimeError, ValueError) as error:
+            record_inference_duration()
+            record_prediction_outcome("error")
             save_failure(str(error))
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Could not process the image: {error}",
             ) from error
-        PREDICTIONS.labels(
-            "defect" if prediction.has_defect else "no_defect",
-            segmenter.config.model_name,
-            segmenter.config.model_alias,
-        ).inc()
+        except Exception:
+            record_inference_duration()
+            record_prediction_outcome("error")
+            raise
+        record_inference_duration()
         latency_ms = (time.perf_counter() - started_at) * 1000.0
         try:
             prediction_store.save_success(
@@ -194,10 +220,12 @@ def create_app(
                 latency_ms=latency_ms,
             )
         except SQLAlchemyError as error:
+            record_prediction_outcome("error")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Prediction completed but could not be stored: {error}",
             ) from error
+        record_prediction_outcome("defect" if prediction.has_defect else "no_defect")
         return segmenter.prediction_response(prediction)
 
     return app

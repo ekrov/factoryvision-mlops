@@ -136,6 +136,32 @@ Prometheus metrics and Grafana dashboards will cover:
 
 Prediction logs will be stored in PostgreSQL with image ID, timestamp, model version, defect score, prediction latency, and status. A small PySpark job will compute daily statistics by model version and defect status.
 
+The API exposes Prometheus counters and histograms at `/metrics`. Example PromQL queries include:
+
+```promql
+# Request rate
+sum(rate(factoryvision_http_requests_total[5m]))
+
+# HTTP error rate
+sum(rate(factoryvision_http_errors_total[5m]))
+/
+sum(rate(factoryvision_http_requests_total[5m]))
+
+# p95 model inference latency
+histogram_quantile(
+  0.95,
+  sum by (le) (rate(factoryvision_inference_duration_seconds_bucket[5m]))
+)
+
+# Predicted defect rate among successful predictions
+sum(rate(factoryvision_predictions_total{outcome="defect"}[5m]))
+/
+clamp_min(
+  sum(rate(factoryvision_predictions_total{outcome=~"defect|no_defect"}[5m])),
+  1e-9
+)
+```
+
 ## Implementation roadmap
 
 ### Data, repository, and baseline model
