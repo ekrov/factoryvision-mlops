@@ -526,6 +526,8 @@ The local services are available at:
 
 Prometheus scrapes `http://api:8000/metrics` over the Compose network, and Grafana is provisioned with Prometheus as its default datasource. The local Grafana credentials are `admin` / `factoryvision`.
 
+Grafana also loads the `FactoryVision - Inference Overview` dashboard automatically from `monitoring/grafana/dashboards/`. It contains panels for request throughput, HTTP error rate, inference latency, prediction throughput by outcome, predicted defect rate, and the current model version. Dashboard provisioning is configured in `monitoring/grafana/provisioning/dashboards/` so it is reproducible after restarting or recreating the containers.
+
 The API is available at `http://127.0.0.1:8000`, the interactive documentation is at `http://127.0.0.1:8000/docs`, and Airflow is available at `http://127.0.0.1:8080`. The local Airflow username is `airflow`. The first initialization generates its password in `simple_auth_manager_passwords.json`; read it with:
 
 ```powershell
