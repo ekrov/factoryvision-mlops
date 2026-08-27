@@ -199,8 +199,8 @@ clamp_min(
 - The FastAPI service is packaged in a verified multi-stage Docker image defined by [`Dockerfile`](Dockerfile). The builder stage installs the Python package and runtime dependencies, while the smaller runtime stage runs Uvicorn as a non-root user and exposes a container health check.
 - Build the API image locally with `docker build --tag factoryvision-api:day5 .`.
 - Docker Compose starts the API, PostgreSQL, MLflow, Prometheus, and Grafana as a connected local stack.
-- Create Kubernetes Deployment, Service, ConfigMap, and resource-limit manifests.
-- Run the stack locally with kind, k3d, or minikube.
+- Kubernetes manifests for the API are provided under [`k8s/`](k8s/): a Deployment with health probes and resource requests/limits, a ClusterIP Service, a ConfigMap, and a Kustomize entry point. See [`k8s/README.md`](k8s/README.md) for local-cluster prerequisites and validation commands.
+- Run the API locally with kind, k3d, or minikube after making the generated ONNX model and PostgreSQL Service available to the cluster.
 
 ### CI/CD and deployment
 

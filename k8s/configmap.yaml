@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: factoryvision-api-config
+  labels:
+    app.kubernetes.io/name: factoryvision-api
+    app.kubernetes.io/part-of: factoryvision
+data:
+  # This points at a PostgreSQL Service named "postgres" in the cluster.
+  # The password is intentionally the local-demo value used by Compose.
+  FACTORYVISION_DATABASE_URL: postgresql+psycopg://factoryvision:factoryvision@postgres:5432/factoryvision
+  FACTORYVISION_ONNX_MODEL: /app/artifacts/models/factoryvision-segmentation.onnx
+  FACTORYVISION_MODEL_NAME: factoryvision-segmentation
+  FACTORYVISION_MODEL_ALIAS: candidate
+  FACTORYVISION_THRESHOLD: "0.5"
