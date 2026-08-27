@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import mlflow
-import numpy as np
 import torch
 from mlflow.models import infer_signature
 from mlflow.tracking import MlflowClient

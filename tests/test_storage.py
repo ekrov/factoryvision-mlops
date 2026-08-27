@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine
 
-from factoryvision.api.inference import InferenceConfig, Prediction
+from factoryvision.api.inference import Prediction
 from factoryvision.api.schemas import BoundingBox
 from factoryvision.storage.database import initialize_database
 from factoryvision.storage.repository import PredictionRepository, image_id_from_bytes

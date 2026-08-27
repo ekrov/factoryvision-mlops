@@ -18,7 +18,7 @@ import numpy as np
 import cv2
 import pandas as pd
 import torch
-from torch import Tensor, nn
+from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, WeightedRandomSampler
 

@@ -1,5 +1,7 @@
 # FactoryVision
 
+[![CI](https://github.com/ekrov/factoryvision-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/ekrov/factoryvision-mlops/actions/workflows/ci.yml)
+
 ## Production-Grade Surface Defect Segmentation & MLOps Platform
 
 FactoryVision is an end-to-end industrial visual-inspection system for detecting and segmenting manufacturing surface defects. The project covers the complete machine-learning lifecycle:
@@ -204,7 +206,7 @@ clamp_min(
 
 ### CI/CD and deployment
 
-- Add a GitHub Actions pipeline for linting, tests, and Docker builds.
+- The [GitHub Actions CI workflow](.github/workflows/ci.yml) runs on pushes to `main` and pull requests targeting `main`. It installs Python 3.11, runs Ruff and `pytest`, and builds the API Docker image after the quality checks pass. Successful pushes to `main` are authenticated with the built-in GitHub token and published to `ghcr.io/ekrov/factoryvision-mlops` with both the commit SHA and `latest` tags.
 - Push successful images to GitHub Container Registry.
 - Deploy the FastAPI container to Azure Container Apps or another simple Azure target.
 - Document secrets, environment variables, load-test results, and rollback procedures.
