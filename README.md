@@ -479,6 +479,8 @@ The prediction response contains `defect_probability`, `defect_area_fraction`, `
 
 The report contains p50 (median) and p95 latency, where p95 means 95% of completed attempts were no slower than that value. It also records successful requests, failed requests, error rate, throughput, and the first few error messages. Generated reports remain under ignored `artifacts/`; repeat the command after changing the request count or concurrency to compare runs. A documented local baseline is available in [`docs/load-test-baseline.md`](docs/load-test-baseline.md).
 
+The current local baseline completed all 20 requests successfully at 4.8279 requests/s, with a 0.0% error rate, 669.3392 ms p50 latency, and 1368.4134 ms p95 latency. These values were measured against the Docker Compose API and are hardware- and workload-specific.
+
 The default model path is `artifacts/models/factoryvision-segmentation.onnx`. It can be overridden without changing code:
 
 ```powershell

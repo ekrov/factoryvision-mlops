@@ -3,6 +3,9 @@
 This is a small local baseline for the Docker Compose API. It is intended to
 show how the measurement works, not to claim production capacity.
 
+Headline result: all 20 requests succeeded at 4.8279 requests/s, with a 0.0%
+error rate, 669.3392 ms p50 latency, and 1368.4134 ms p95 latency.
+
 | Measurement | Result |
 | --- | ---: |
 | Endpoint | `POST /predict` |
