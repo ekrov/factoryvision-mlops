@@ -12,6 +12,15 @@ The target outcome is a reproducible, production-oriented computer-vision platfo
 
 > This README is the main project guide. It summarizes the implemented system, shows verified results, and links to the commands and operational documentation needed to reproduce it.
 
+## Featured demo
+
+**[▶ Watch the 2 minute 30 second end-to-end demo video](assets/demo/factoryvision-demo.mp4)**
+
+The walkthrough shows an image upload, FastAPI prediction, segmentation
+post-processing, Prometheus/Grafana monitoring, and MLflow model selection.
+The [static storyboard](assets/demo/factoryvision-demo-storyboard.png) and
+[demo guide](docs/demo.md) explain the scenes in detail.
+
 ## Project goals
 
 - Train a PyTorch segmentation model for industrial surface defects.
@@ -285,9 +294,10 @@ and can be reproduced with Docker Compose.
 
 ## End-to-end demo
 
-The [2 minute 30 second demo GIF](assets/demo/factoryvision-demo.gif) walks
+The [2 minute 30 second demo video](assets/demo/factoryvision-demo.mp4) walks
 through image upload, FastAPI prediction, segmentation post-processing,
 Prometheus/Grafana monitoring, and MLflow model selection. The static
+[GIF fallback](assets/demo/factoryvision-demo.gif),
 [storyboard](assets/demo/factoryvision-demo-storyboard.png), exact
 [API response](assets/demo/api-response.json), and instructions for rebuilding
 the demo are in [`docs/demo.md`](docs/demo.md).
@@ -371,7 +381,7 @@ factoryvision-mlops/
 |-- conf/base/             # Kedro parameters and catalog configuration
 |-- data/                  # DVC pointers only
 |-- assets/screenshots/    # Checked-in README visual evidence
-|-- assets/demo/           # End-to-end demo GIF and storyboard
+|-- assets/demo/           # End-to-end demo video, GIF, and storyboard
 |-- docker/
 |-- k8s/
 |-- docs/                  # Configuration, load-test, and rollback guides

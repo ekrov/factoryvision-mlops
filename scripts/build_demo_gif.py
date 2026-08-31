@@ -1,4 +1,4 @@
-"""Build a reviewable end-to-end FactoryVision demo GIF."""
+"""Build a reviewable end-to-end FactoryVision demo video and GIF."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import io
 import json
 from pathlib import Path
 
+import cv2
+import numpy as np
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -18,12 +20,15 @@ from factoryvision.api.main import create_app
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "assets" / "demo"
 WIDTH, HEIGHT = 1280, 720
-BACKGROUND = "#0f172a"
-PANEL = "#1e293b"
-TEXT = "#f8fafc"
-MUTED = "#cbd5e1"
-GREEN = "#86efac"
-ORANGE = "#fdba74"
+TOTAL_SECONDS = 150
+BACKGROUND = "#f7f3ec"
+PANEL = "#fffdf9"
+PANEL_BORDER = "#e5ded4"
+TEXT = "#263238"
+MUTED = "#66727a"
+GREEN = "#2f855a"
+ORANGE = "#e8752a"
+TRACK = "#e5ded4"
 
 
 class DemoStore:
@@ -69,7 +74,13 @@ def write_text(
 def panel(canvas: Image.Image, box: tuple[int, int, int, int]) -> None:
     """Draw a rounded panel behind one demo section."""
 
-    ImageDraw.Draw(canvas).rounded_rectangle(box, radius=18, fill=PANEL)
+    ImageDraw.Draw(canvas).rounded_rectangle(
+        box,
+        radius=18,
+        fill=PANEL,
+        outline=PANEL_BORDER,
+        width=2,
+    )
 
 
 def header(title: str, subtitle: str) -> Image.Image:
@@ -79,8 +90,33 @@ def header(title: str, subtitle: str) -> Image.Image:
     draw = ImageDraw.Draw(canvas)
     write_text(draw, (48, 34), title, 34, bold=True)
     write_text(draw, (50, 82), subtitle, 18, MUTED)
-    write_text(draw, (48, 678), "FactoryVision | local evidence walkthrough", 16, MUTED)
+    write_text(draw, (48, 662), "FactoryVision | local evidence walkthrough", 16, MUTED)
     return canvas
+
+
+def add_progress_bar(canvas: Image.Image, elapsed_seconds: float) -> Image.Image:
+    """Add a bottom timeline that grows continuously through the video."""
+
+    result = canvas.copy()
+    draw = ImageDraw.Draw(result)
+    left, right = 48, WIDTH - 48
+    track_top, track_bottom = HEIGHT - 18, HEIGHT - 10
+    progress = min(1.0, max(0.0, elapsed_seconds / TOTAL_SECONDS))
+    draw.rounded_rectangle(
+        (left, track_top, right, track_bottom),
+        radius=4,
+        fill=TRACK,
+    )
+    draw.rounded_rectangle(
+        (left, track_top, left + int((right - left) * progress), track_bottom),
+        radius=4,
+        fill=ORANGE,
+    )
+    minutes, seconds = divmod(int(elapsed_seconds), 60)
+    total_minutes, total_seconds = divmod(TOTAL_SECONDS, 60)
+    timestamp = f"{minutes:02d}:{seconds:02d} / {total_minutes:02d}:{total_seconds:02d}"
+    write_text(draw, (WIDTH - 190, 662), timestamp, 16, MUTED)
+    return result
 
 
 def contain(image: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -103,6 +139,28 @@ def centered_paste(
     canvas.paste(fitted, (x, y))
 
 
+def letterbox_content_box(
+    image_path: Path,
+    target_size: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    """Return the original-image region inside the API's padded canvas."""
+
+    image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if image is None:
+        raise FileNotFoundError(f"Could not read demo image: {image_path}")
+    target_width, target_height = target_size
+    original_height, original_width = image.shape[:2]
+    scale = min(
+        target_height / original_height,
+        target_width / original_width,
+    )
+    resized_height = min(target_height, max(1, round(original_height * scale)))
+    resized_width = min(target_width, max(1, round(original_width * scale)))
+    top = (target_height - resized_height) // 2
+    left = (target_width - resized_width) // 2
+    return (left, top, left + resized_width, top + resized_height)
+
+
 def run_api_demo() -> tuple[dict[str, object], Image.Image]:
     """Call the real FastAPI prediction route and build its overlay."""
 
@@ -122,15 +180,14 @@ def run_api_demo() -> tuple[dict[str, object], Image.Image]:
     mask = Image.open(io.BytesIO(mask_bytes)).convert("L")
     original = Image.open(image_path).convert("RGB")
     target_size = (payload["mask_width"], payload["mask_height"])
-    letterboxed = Image.new("RGB", target_size)
-    fitted = contain(original, target_size)
-    letterboxed.paste(
-        fitted,
-        ((letterboxed.width - fitted.width) // 2, (letterboxed.height - fitted.height) // 2),
+    content_box = letterbox_content_box(image_path, target_size)
+    cropped_mask = mask.crop(content_box).resize(
+        original.size,
+        resample=Image.Resampling.NEAREST,
     )
-    red = Image.new("RGB", letterboxed.size, (239, 68, 68))
-    highlighted = Image.composite(red, letterboxed, mask)
-    overlay = Image.blend(letterboxed, highlighted, 0.45)
+    red = Image.new("RGB", original.size, (239, 68, 68))
+    highlighted = Image.composite(red, original, cropped_mask)
+    overlay = Image.blend(original, highlighted, 0.45)
     return payload, overlay
 
 
@@ -165,7 +222,7 @@ def api_slide(payload: dict[str, object]) -> Image.Image:
 
     canvas = header(
         "1 | Upload and predict",
-        "The GIF calls the real FastAPI /predict route with an in-memory demo store",
+        "The demo calls the real FastAPI /predict route with an in-memory demo store",
     )
     panel(canvas, (48, 135, 420, 625))
     centered_paste(
@@ -197,12 +254,12 @@ def prediction_slide(payload: dict[str, object], overlay: Image.Image) -> Image.
 
     canvas = header(
         "2 | Inspect the segmentation result",
-        "The predicted mask is returned as a base64-encoded PNG",
+        "The predicted mask is returned as a base64-encoded PNG and displayed on the original image",
     )
     panel(canvas, (48, 135, 790, 625))
     centered_paste(canvas, overlay, (72, 165, 766, 580))
     draw = ImageDraw.Draw(canvas)
-    write_text(draw, (72, 590), "Predicted defect overlay", 20, GREEN, bold=True)
+    write_text(draw, (72, 590), "Predicted overlay, cropped to original image", 20, GREEN, bold=True)
     panel(canvas, (830, 135, 1232, 625))
     write_text(draw, (860, 175), "Post-processing", 24, bold=True)
     lines = [
@@ -299,8 +356,34 @@ def closing_slide() -> Image.Image:
     return canvas
 
 
+def save_mp4(frames: list[Image.Image], output_path: Path) -> None:
+    """Write the storyboard frames as a 2:30 MP4 video."""
+
+    fps = 10
+    durations = [12, 24, 30, 30, 30, 24]
+    writer = cv2.VideoWriter(
+        str(output_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        fps,
+        (WIDTH, HEIGHT),
+    )
+    if not writer.isOpened():
+        raise RuntimeError("Could not open an MP4 video writer.")
+    elapsed = 0.0
+    try:
+        for frame, seconds in zip(frames, durations, strict=True):
+            for tick in range(seconds * fps):
+                elapsed_frame = add_progress_bar(frame, elapsed + tick / fps)
+                frame_array = np.asarray(elapsed_frame)
+                frame_bgr = cv2.cvtColor(frame_array, cv2.COLOR_RGB2BGR)
+                writer.write(frame_bgr)
+            elapsed += seconds
+    finally:
+        writer.release()
+
+
 def main() -> None:
-    """Build the demo GIF, storyboard preview, overlay, and response evidence."""
+    """Build the demo video, GIF fallback, storyboard, and response evidence."""
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     payload, overlay = run_api_demo()
@@ -312,11 +395,21 @@ def main() -> None:
         mlflow_slide(),
         closing_slide(),
     ]
+    video_path = OUT_DIR / "factoryvision-demo.mp4"
+    save_mp4(frames, video_path)
     gif_path = OUT_DIR / "factoryvision-demo.gif"
-    frames[0].save(
+    gif_frames = [
+        add_progress_bar(frame, elapsed)
+        for frame, elapsed in zip(
+            frames,
+            [0, 12, 36, 66, 96, 126],
+            strict=True,
+        )
+    ]
+    gif_frames[0].save(
         gif_path,
         save_all=True,
-        append_images=frames[1:],
+        append_images=gif_frames[1:],
         duration=[12000, 24000, 30000, 30000, 30000, 24000],
         loop=0,
         optimize=True,
@@ -333,6 +426,7 @@ def main() -> None:
         json.dumps(payload, indent=2) + "\n", encoding="utf-8"
     )
     print(f"Saved {gif_path}")
+    print(f"Saved {video_path}")
     print(f"Saved {OUT_DIR / 'factoryvision-demo-storyboard.png'}")
     print(f"Saved {OUT_DIR / 'api-prediction-overlay.png'}")
     print(f"Saved {OUT_DIR / 'api-response.json'}")
