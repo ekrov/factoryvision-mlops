@@ -36,6 +36,9 @@ The target outcome is a reproducible, production-oriented computer-vision platfo
 | Observability | Prometheus metrics and a provisioned Grafana dashboard |
 | Delivery | GitHub Actions quality checks, Docker builds, and GHCR image publishing |
 
+The assumptions, intended uses, limitations, and provenance are documented in
+the [Model Card](MODEL_CARD.md) and [Data Card](DATA_CARD.md).
+
 ## Quick start
 
 The complete local flow is:
@@ -254,6 +257,21 @@ baseline model's predicted overlays for defective and non-defective examples.
 
 <img src="assets/screenshots/baseline-validation-previews.png" alt="Baseline validation inputs, ground-truth masks, and predicted defect overlays" width="100%" />
 
+The montage contains four representative input/prediction examples. Each row
+contains the input image, its ground-truth mask, and the model's predicted
+overlay:
+
+| Example | Ground-truth class | Observed prediction | Interpretation |
+| --- | --- | --- | --- |
+| 1 | Defect | The predicted overlay does not visibly cover the labeled region. | False-negative behavior: a small defect is missed. |
+| 2 | Defect | A few predicted pixels appear, but most of the labeled defect is missed. | Partial detection and under-segmentation. |
+| 3 | Non-defect | The ground-truth and predicted overlays are empty. | Correct no-defect behavior for this example. |
+| 4 | Non-defect | The ground-truth and predicted overlays are empty. | Another correct no-defect behavior. |
+
+These examples are included to show both successful behavior and failure modes;
+the low baseline IoU and Dice scores indicate that the defect examples still
+need substantial improvement.
+
 ### Grafana inference dashboard
 
 The dashboard presents request throughput, HTTP error rate, inference latency,
@@ -345,6 +363,7 @@ factoryvision-mlops/
 |-- docker/
 |-- k8s/
 |-- docs/                  # Configuration, load-test, and rollback guides
+|-- docs/                  # Configuration, load-test, and rollback guides
 |-- notebooks/
 |-- src/factoryvision/
 |   |-- data/
@@ -361,6 +380,7 @@ factoryvision-mlops/
 |-- Makefile
 |-- pyproject.toml
 |-- MODEL_CARD.md
+|-- DATA_CARD.md
 `-- README.md
 ```
 
