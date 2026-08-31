@@ -283,6 +283,17 @@ The dashboard is provisioned from
 [`monitoring/grafana/dashboards/factoryvision-overview.json`](monitoring/grafana/dashboards/factoryvision-overview.json)
 and can be reproduced with Docker Compose.
 
+## End-to-end demo
+
+The [2 minute 30 second demo GIF](assets/demo/factoryvision-demo.gif) walks
+through image upload, FastAPI prediction, segmentation post-processing,
+Prometheus/Grafana monitoring, and MLflow model selection. The static
+[storyboard](assets/demo/factoryvision-demo-storyboard.png), exact
+[API response](assets/demo/api-response.json), and instructions for rebuilding
+the demo are in [`docs/demo.md`](docs/demo.md).
+
+<img src="assets/demo/factoryvision-demo-storyboard.png" alt="FactoryVision six-scene end-to-end demo storyboard" width="100%" />
+
 ## Implementation roadmap
 
 ### Data, repository, and baseline model
@@ -360,6 +371,7 @@ factoryvision-mlops/
 |-- conf/base/             # Kedro parameters and catalog configuration
 |-- data/                  # DVC pointers only
 |-- assets/screenshots/    # Checked-in README visual evidence
+|-- assets/demo/           # End-to-end demo GIF and storyboard
 |-- docker/
 |-- k8s/
 |-- docs/                  # Configuration, load-test, and rollback guides
