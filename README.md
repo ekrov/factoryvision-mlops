@@ -209,7 +209,7 @@ clamp_min(
 - The [GitHub Actions CI workflow](.github/workflows/ci.yml) runs on pushes to `main` and pull requests targeting `main`. It installs Python 3.11, runs Ruff and `pytest`, and builds the API Docker image after the quality checks pass. Successful pushes to `main` are authenticated with the built-in GitHub token and published to `ghcr.io/ekrov/factoryvision-mlops` with both the commit SHA and `latest` tags.
 - Push successful images to GitHub Container Registry.
 - Deploy the FastAPI container to Azure Container Apps or another simple Azure target.
-- Document secrets, environment variables, load-test results, and rollback procedures.
+- Document secrets, environment variables, load-test results, and rollback procedures. Configuration is in [`docs/configuration.md`](docs/configuration.md), load-test results are in [`docs/load-test-baseline.md`](docs/load-test-baseline.md), and the rollback runbook is in [`docs/rollback.md`](docs/rollback.md).
 
 ### Portfolio and release readiness
 
