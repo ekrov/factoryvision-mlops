@@ -464,6 +464,21 @@ curl.exe -X POST http://127.0.0.1:8000/predict -F "file=@path\\to\\inspection.pn
 
 The prediction response contains `defect_probability`, `defect_area_fraction`, `has_defect`, a `bounding_box` when defect pixels are present, and a base64-encoded PNG in `mask_base64`. The mask is produced at `256 x 640`, while the original image dimensions are also returned. The service uses the same aspect-preserving resize, letterboxing, RGB conversion, and `[0, 1]` normalization as the training dataset loader.
 
+### Small load test
+
+[`scripts/load_test.py`](scripts/load_test.py) sends concurrent multipart image requests to `/predict` and records client-observed end-to-end latency, throughput, HTTP status counts, and error rate. It uses only the Python standard library, so it does not add a runtime service dependency. Run it against a locally running API with:
+
+```powershell
+.venv\Scripts\python.exe scripts\load_test.py `
+  --url http://127.0.0.1:8000/predict `
+  --image assets\dataset\non_defect_sample.jpg `
+  --requests 20 `
+  --concurrency 4 `
+  --output artifacts\load-test\report.json
+```
+
+The report contains p50 (median) and p95 latency, where p95 means 95% of completed attempts were no slower than that value. It also records successful requests, failed requests, error rate, throughput, and the first few error messages. Generated reports remain under ignored `artifacts/`; repeat the command after changing the request count or concurrency to compare runs. A documented local baseline is available in [`docs/load-test-baseline.md`](docs/load-test-baseline.md).
+
 The default model path is `artifacts/models/factoryvision-segmentation.onnx`. It can be overridden without changing code:
 
 ```powershell
