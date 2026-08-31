@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: factoryvision
-      POSTGRES_USER: factoryvision
-      POSTGRES_PASSWORD: factoryvision
+      POSTGRES_DB: ${POSTGRES_DB:-factoryvision}
+      POSTGRES_USER: ${POSTGRES_USER:-factoryvision}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-factoryvision}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U factoryvision -d factoryvision"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-factoryvision} -d $${POSTGRES_DB:-factoryvision}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -20,8 +20,12 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      FACTORYVISION_DATABASE_URL: postgresql+psycopg://factoryvision:factoryvision@postgres:5432/factoryvision
-      FACTORYVISION_ONNX_MODEL: /app/artifacts/models/factoryvision-segmentation.onnx
+      FACTORYVISION_DATABASE_URL: ${FACTORYVISION_DATABASE_URL:-postgresql+psycopg://factoryvision:factoryvision@postgres:5432/factoryvision}
+      FACTORYVISION_ONNX_MODEL: ${FACTORYVISION_ONNX_MODEL:-/app/artifacts/models/factoryvision-segmentation.onnx}
+      FACTORYVISION_MODEL_NAME: ${FACTORYVISION_MODEL_NAME:-factoryvision-segmentation}
+      FACTORYVISION_MODEL_ALIAS: ${FACTORYVISION_MODEL_ALIAS:-candidate}
+      FACTORYVISION_THRESHOLD: ${FACTORYVISION_THRESHOLD:-0.5}
+      FACTORYVISION_MAX_UPLOAD_BYTES: ${FACTORYVISION_MAX_UPLOAD_BYTES:-10000000}
     ports:
       - "8000:8000"
     volumes:
@@ -38,13 +42,15 @@ services:
   postgres-init:
     image: postgres:16
     environment:
-      PGPASSWORD: factoryvision
+      PGPASSWORD: ${POSTGRES_PASSWORD:-factoryvision}
+      PGUSER: ${POSTGRES_USER:-factoryvision}
+      PGDATABASE: ${POSTGRES_DB:-factoryvision}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        until pg_isready -h postgres -U factoryvision -d factoryvision; do sleep 1; done;
-        psql -h postgres -U factoryvision -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='mlflow'" | grep -q 1 ||
-        psql -h postgres -U factoryvision -d postgres -c "CREATE DATABASE mlflow"
+        until pg_isready -h postgres -U $${POSTGRES_USER:-factoryvision} -d $${POSTGRES_DB:-factoryvision}; do sleep 1; done;
+        psql -h postgres -U $${POSTGRES_USER:-factoryvision} -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='mlflow'" | grep -q 1 ||
+        psql -h postgres -U $${POSTGRES_USER:-factoryvision} -d postgres -c "CREATE DATABASE mlflow"
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,16 +61,17 @@ services:
       dockerfile: docker/Dockerfile.airflow
     environment: &airflow-environment
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://factoryvision:factoryvision@postgres:5432/factoryvision
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://factoryvision:factoryvision@postgres:5432/factoryvision}
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
       AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
-      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: airflow:admin
-      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/simple_auth_manager_passwords.json
-      FACTORYVISION_DATABASE_URL: postgresql+psycopg://factoryvision:factoryvision@postgres:5432/factoryvision
-      FACTORYVISION_ONNX_MODEL: /app/artifacts/models/factoryvision-segmentation.onnx
-      FACTORYVISION_BATCH_IMAGE_DIR: /app/data/batch/incoming
-      FACTORYVISION_BATCH_ARTIFACT_DIR: /app/artifacts/batch
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: ${AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS:-airflow:admin}
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: ${AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE:-/opt/airflow/simple_auth_manager_passwords.json}
+      FACTORYVISION_DATABASE_URL: ${FACTORYVISION_DATABASE_URL:-postgresql+psycopg://factoryvision:factoryvision@postgres:5432/factoryvision}
+      FACTORYVISION_ONNX_MODEL: ${FACTORYVISION_ONNX_MODEL:-/app/artifacts/models/factoryvision-segmentation.onnx}
+      FACTORYVISION_BATCH_IMAGE_DIR: ${FACTORYVISION_BATCH_IMAGE_DIR:-/app/data/batch/incoming}
+      FACTORYVISION_BATCH_ARTIFACT_DIR: ${FACTORYVISION_BATCH_ARTIFACT_DIR:-/app/artifacts/batch}
+      FACTORYVISION_BATCH_MAX_IMAGES: ${FACTORYVISION_BATCH_MAX_IMAGES:-}
     volumes: &airflow-volumes
       - airflow_home:/opt/airflow
       - ./airflow/dags:/opt/airflow/dags
@@ -125,7 +132,7 @@ services:
       - --port
       - "5000"
       - --backend-store-uri
-      - postgresql://factoryvision:factoryvision@postgres:5432/mlflow
+      - ${MLFLOW_BACKEND_STORE_URI:-postgresql://factoryvision:factoryvision@postgres:5432/mlflow}
       - --artifacts-destination
       - /mlartifacts
       - --serve-artifacts
@@ -160,8 +167,8 @@ services:
   grafana:
     image: grafana/grafana:11.1.0
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: factoryvision
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-factoryvision}
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
       - "3000:3000"

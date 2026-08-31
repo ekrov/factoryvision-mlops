@@ -510,6 +510,8 @@ The ONNX model is intentionally not stored in Git because it is a generated arti
 .venv\Scripts\python.exe scripts\export_onnx.py
 ```
 
+Configuration is documented in [`docs/configuration.md`](docs/configuration.md), with a safe [`.env.example`](.env.example) template. Copy it to `.env` for local overrides; `.env` is ignored by Git and must never contain committed credentials.
+
 Then build and start the stack:
 
 ```powershell

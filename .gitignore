@@ -1,6 +1,9 @@
 # Local learning instructions; keep them out of the public repository.
 instructions.md
 factoryvision-notion.md
+.env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.py[cod]
