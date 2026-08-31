@@ -8,9 +8,9 @@ FactoryVision is an end-to-end industrial visual-inspection system for detecting
 
 **data versioning -> preprocessing -> GPU training -> evaluation -> experiment tracking -> model registry -> optimized serving -> batch inference -> deployment -> monitoring**
 
-The target outcome is a reproducible, production-oriented computer-vision platform rather than an isolated research notebook.
+The target outcome is a reproducible, production-oriented computer-vision platform rather than an isolated research notebook. The repository includes data versioning, model training and evaluation, optimized inference, APIs, batch workflows, observability, CI/CD, and a locally validated Kubernetes deployment boundary.
 
-> This README describes the complete target system. Metrics, benchmarks, deployment endpoints, and screenshots will be added as they are produced.
+> This README is the main project guide. It summarizes the implemented system, shows verified results, and links to the commands and operational documentation needed to reproduce it.
 
 ## Project goals
 
@@ -22,41 +22,92 @@ The target outcome is a reproducible, production-oriented computer-vision platfo
 - Monitor service health, inference performance, and model/business metrics.
 - Demonstrate software engineering practices including testing, CI/CD, orchestration, and observability.
 
+## Project at a glance
+
+| Area | Current implementation |
+| --- | --- |
+| Dataset | KolektorSDD2 images and pixel-level defect masks, tracked with DVC |
+| Model | PyTorch U-Net trained for binary semantic segmentation |
+| Experiment lifecycle | Kedro pipelines, MLflow tracking, comparison runs, and a registered candidate model |
+| Serving | ONNX Runtime behind a FastAPI REST API |
+| Persistence | PostgreSQL prediction metadata and status records |
+| Batch processing | Airflow discovery-to-summary workflow and PySpark daily analytics |
+| Platform | Docker Compose local stack and locally validated Kubernetes manifests |
+| Observability | Prometheus metrics and a provisioned Grafana dashboard |
+| Delivery | GitHub Actions quality checks, Docker builds, and GHCR image publishing |
+
+## Quick start
+
+The complete local flow is:
+
+```powershell
+git clone https://github.com/ekrov/factoryvision-mlops.git
+Set-Location factoryvision-mlops
+py -3.11 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -e ".[training,dev]"
+.venv\Scripts\dvc.exe pull
+.venv\Scripts\kedro.exe run
+.venv\Scripts\python.exe scripts\register_best_model.py
+.venv\Scripts\python.exe scripts\export_onnx.py
+docker compose up --build
+```
+
+The training and registration commands create the local model artifacts needed
+by the export step. If those artifacts already exist, start at the export step.
+The Compose stack then exposes the API at `http://localhost:8000`, MLflow at
+`http://localhost:5000`, Grafana at `http://localhost:3000`, Prometheus at
+`http://localhost:9090`, and Airflow at `http://localhost:8080`. Detailed
+commands and configuration notes are in [Run the local platform with Docker
+Compose](#run-the-local-platform-with-docker-compose) and
+[`docs/configuration.md`](docs/configuration.md).
+
 ## Problem and dataset
 
-FactoryVision targets pixel-level industrial defect inspection using the [KolektorSDD2 dataset](https://www.vicos.si/resources/kolektorsdd2/). The system will produce:
+FactoryVision targets pixel-level industrial defect inspection using the [KolektorSDD2 dataset](https://www.vicos.si/resources/kolektorsdd2/). The system produces:
 
 - a predicted defect mask;
 - a defect/no-defect score;
 - a derived bounding box;
 - segmentation and defect-level evaluation metrics.
 
-The initial model will be a PyTorch U-Net or DeepLabV3 implementation. The project prioritizes reproducibility and production integration over adding multiple deep-learning frameworks or unnecessarily novel architectures.
+The baseline model is a PyTorch U-Net implementation. The project prioritizes reproducibility and production integration over adding multiple deep-learning frameworks or unnecessarily novel architectures.
 
 ## Dataset examples
 
-These are raw dataset inputs before model inference. The left image shows representative defect types from the official dataset overview; the right image is a defect-free training sample. The model will learn to distinguish these cases and, for defective inputs, produce a pixel-level mask.
+These are local copies of raw KolektorSDD2 examples before model inference. The
+defect sample has a matching binary ground-truth mask; the non-defect sample
+has an empty mask. The model learns to distinguish these cases and, for
+defective inputs, produce a pixel-level mask.
 
 <table>
   <tr>
-    <th>Defect examples</th>
+    <th>Defect sample</th>
+    <th>Ground-truth mask</th>
     <th>Non-defect example</th>
   </tr>
   <tr>
     <td>
-      <img src="https://www.vicos.si/resources/kolektorsdd2/images/kolektor-sdd2-types.png" alt="Representative KolektorSDD2 surface defect examples" width="420" />
+      <img src="assets/dataset/defect_sample.png" alt="KolektorSDD2 surface defect sample" width="240" />
+    </td>
+    <td>
+      <img src="assets/dataset/defect_sample_mask.png" alt="Ground-truth mask for the defect sample" width="240" />
     </td>
     <td>
       <img src="assets/dataset/non_defect_sample.jpg" alt="KolektorSDD2 defect-free surface sample" width="240" />
     </td>
   </tr>
   <tr>
-    <td>Scratches, spots, and other surface imperfections.</td>
+    <td>A surface image containing a labeled defect.</td>
+    <td>White pixels mark the defect; black pixels are background.</td>
     <td>A surface image labeled without a visible defect.</td>
   </tr>
 </table>
 
-The defect overview image is provided by [ViCoS Lab](https://www.vicos.si/resources/kolektorsdd2/). The non-defect sample is from a [KolektorSDD2 dataset mirror](https://huggingface.co/datasets/sizhkhy/kolektor_sdd2) and is stored locally so the example renders reliably on GitHub. Dataset usage remains subject to the original [CC BY-NC-SA 4.0 license](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+The samples are stored locally so the examples render reliably on GitHub. The
+full dataset is provided by [ViCoS Lab](https://www.vicos.si/resources/kolektorsdd2/)
+and tracked with DVC; dataset usage remains subject to the original
+[CC BY-NC-SA 4.0 license](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
 ## Architecture
 
@@ -72,12 +123,15 @@ flowchart LR
     G --> I["Prometheus metrics"]
     I --> J["Grafana dashboard"]
     G --> K["Docker"]
-    K --> L["Kubernetes / Azure deployment"]
+    K --> L["Local Kubernetes deployment"]
     M["Airflow"] --> C
     M --> G
     N["GitHub Actions"] --> K
     O["PySpark offline analytics"] --> H
 ```
+
+The local Kubernetes deployment is the demonstrated deployment target. Azure
+Container Apps is an extension point, not a claimed cloud deployment.
 
 ## Technology stack
 
@@ -96,7 +150,7 @@ flowchart LR
 
 ## Inference API
 
-The FastAPI service will provide:
+The FastAPI service provides:
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -105,11 +159,12 @@ The FastAPI service will provide:
 | `GET /model-info` | Model version, evaluation metrics, and runtime metadata |
 | `GET /metrics` | Prometheus-formatted service and inference metrics |
 
-The service will include request validation, clear error responses, automated `pytest` tests, and a comparison between PyTorch and ONNX Runtime inference.
+The service includes request validation, clear error responses, automated
+`pytest` tests, and a comparison between PyTorch and ONNX Runtime inference.
 
 ## Evaluation and performance
 
-Model quality will be reported with:
+Model quality is reported with:
 
 - Dice score;
 - Intersection over Union (IoU);
@@ -117,7 +172,7 @@ Model quality will be reported with:
 - defect-level F1 score;
 - qualitative prediction overlays.
 
-Serving performance will be benchmarked with:
+Serving performance is benchmarked with:
 
 - model size;
 - mean inference latency;
@@ -125,9 +180,25 @@ Serving performance will be benchmarked with:
 - throughput;
 - error rate.
 
+## Verified results
+
+| Validation | Result | Context |
+| --- | --- | --- |
+| Baseline segmentation | IoU `0.0489`, Dice `0.0932`, defect F1 `0.5029` | Two-epoch mini-study winner on the official split |
+| ONNX export agreement | Maximum absolute output difference `2.29e-05` | One identical input compared between PyTorch and ONNX Runtime |
+| ONNX CPU benchmark | `669.14 ms` mean latency, `1.494 images/s` | 20 measured runs after 5 warm-ups |
+| API load test | `0.0%` errors, `4.8279 requests/s`, `669.3392 ms` p50, `1368.4134 ms` p95 | 20 requests at concurrency 4 through Docker Compose |
+| Kubernetes smoke test | Rollout, `/health`, `/model-info`, and `/predict` succeeded | Local kind cluster |
+| CI/CD | Quality checks passed and the API image was published to GHCR | GitHub Actions on `main` |
+
+These are reproducibility and integration snapshots, not a claim of production
+accuracy or production capacity. Full context is available in the
+[load-test baseline](docs/load-test-baseline.md), [rollback runbook](docs/rollback.md),
+and the experiment sections below.
+
 ## Observability
 
-Prometheus metrics and Grafana dashboards will cover:
+Prometheus metrics and Grafana dashboards cover:
 
 - request count and error rate;
 - inference latency histograms;
@@ -136,7 +207,7 @@ Prometheus metrics and Grafana dashboards will cover:
 - predicted defect rate;
 - service and model/business health.
 
-Prediction logs will be stored in PostgreSQL with image ID, timestamp, model version, defect score, prediction latency, and status. A small PySpark job will compute daily statistics by model version and defect status.
+Prediction logs are stored in PostgreSQL with image ID, timestamp, model version, defect score, prediction latency, and status. A small PySpark job computes daily statistics by model version and defect status.
 
 The API exposes Prometheus counters and histograms at `/metrics`. Example PromQL queries include:
 
@@ -163,6 +234,36 @@ clamp_min(
   1e-9
 )
 ```
+
+## Screenshots and visual evidence
+
+The following images are checked into `assets/screenshots/` so the README
+renders without depending on ignored local artifacts.
+
+### Dataset loader and ground truth
+
+This smoke-test visualization shows the resized RGB input, the binary
+ground-truth mask, and the aligned overlay used to verify preprocessing.
+
+<img src="assets/screenshots/dataset-loader-smoke-test.png" alt="Dataset loader smoke test with resized image, binary ground truth mask, and aligned overlay" width="100%" />
+
+### Baseline validation predictions
+
+This montage shows validation inputs, their ground-truth masks, and the
+baseline model's predicted overlays for defective and non-defective examples.
+
+<img src="assets/screenshots/baseline-validation-previews.png" alt="Baseline validation inputs, ground-truth masks, and predicted defect overlays" width="100%" />
+
+### Grafana inference dashboard
+
+The dashboard presents request throughput, HTTP error rate, inference latency,
+prediction outcomes, predicted defect rate, and the current model version.
+
+<img src="assets/screenshots/grafana-dashboard.png" alt="FactoryVision Grafana inference dashboard" width="100%" />
+
+The dashboard is provisioned from
+[`monitoring/grafana/dashboards/factoryvision-overview.json`](monitoring/grafana/dashboards/factoryvision-overview.json)
+and can be reproduced with Docker Compose.
 
 ## Implementation roadmap
 
@@ -207,9 +308,9 @@ clamp_min(
 ### CI/CD and deployment
 
 - The [GitHub Actions CI workflow](.github/workflows/ci.yml) runs on pushes to `main` and pull requests targeting `main`. It installs Python 3.11, runs Ruff and `pytest`, and builds the API Docker image after the quality checks pass. Successful pushes to `main` are authenticated with the built-in GitHub token and published to `ghcr.io/ekrov/factoryvision-mlops` with both the commit SHA and `latest` tags.
-- Push successful images to GitHub Container Registry.
-- Deploy the FastAPI container to Azure Container Apps or another simple Azure target.
-- Document secrets, environment variables, load-test results, and rollback procedures. Configuration is in [`docs/configuration.md`](docs/configuration.md), load-test results are in [`docs/load-test-baseline.md`](docs/load-test-baseline.md), and the rollback runbook is in [`docs/rollback.md`](docs/rollback.md).
+- Successful pushes publish images to GitHub Container Registry with both the commit SHA and `latest` tags.
+- Local Kubernetes deployment is documented and validated; Azure Container Apps remains an extension point rather than a claimed cloud deployment.
+- Configuration, load-test results, and rollback procedures are documented in [`docs/configuration.md`](docs/configuration.md), [`docs/load-test-baseline.md`](docs/load-test-baseline.md), and [`docs/rollback.md`](docs/rollback.md).
 
 ### Portfolio and release readiness
 
@@ -240,8 +341,10 @@ factoryvision-mlops/
 |-- configs/
 |-- conf/base/             # Kedro parameters and catalog configuration
 |-- data/                  # DVC pointers only
+|-- assets/screenshots/    # Checked-in README visual evidence
 |-- docker/
 |-- k8s/
+|-- docs/                  # Configuration, load-test, and rollback guides
 |-- notebooks/
 |-- src/factoryvision/
 |   |-- data/
